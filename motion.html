@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxury Tech Motion Design</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Inter', sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #play-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            cursor: pointer;
+            transition: opacity 0.6s ease;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            border: 1px solid #fff;
+            color: #fff;
+            background: transparent;
+            font-size: 14px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-radius: 30px;
+            transition: all 0.3s;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        #brand-logo {
+            font-size: 48px;
+            letter-spacing: 12px;
+            font-weight: 300;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+            display: none;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(255,191,0,0.4), 0 0 80px rgba(255,191,0,0.15);
+        }
+
+        #glow-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+        }
+
+        #amber-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 400px;
+            height: 400px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,191,0,0.3) 0%, rgba(255,191,0,0.08) 40%, transparent 70%);
+            opacity: 0;
+        }
+
+        @media (max-width: 768px) {
+            #brand-logo {
+                font-size: 28px;
+                letter-spacing: 8px;
+            }
+            .btn {
+                padding: 12px 30px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="play-overlay">
+        <button class="btn">开始演变</button>
+    </div>
+
+    <div id="glow-layer">
+        <div id="amber-glow"></div>
+    </div>
+    <div id="brand-logo">MOTION</div>
+
+    <script>
+        let scene, camera, renderer, timeline, ambientLight;
+        let mainGroup = new THREE.Group();
+        let currentObject = null;
+        let isPlaying = false;
+
+        const COLORS = {
+            white: 0xffffff,
+            black: 0x000000,
+            amber: 0xffbf00
+        };
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(COLORS.black);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            // 基础环境光
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            scene.add(ambientLight);
+
+            scene.add(mainGroup);
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.getElementById('play-overlay').addEventListener('click', startSequence);
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // 递归清理 Three.js 对象
+        function disposeObject(obj) {
+            if (!obj) return;
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => m.dispose());
+                } else {
+                    obj.material.dispose();
+                }
+            }
+            if (obj.children) {
+                [...obj.children].forEach(child => disposeObject(child));
+            }
+        }
+
+        function clearMainGroup() {
+            [...mainGroup.children].forEach(child => {
+                disposeObject(child);
+                mainGroup.remove(child);
+            });
+        }
+
+        function resetScene() {
+            if (timeline) timeline.kill();
+            clearMainGroup();
+            scene.children
+                .filter(c => c !== mainGroup && c !== ambientLight)
+                .forEach(c => { disposeObject(c); scene.remove(c); });
+
+            document.getElementById('brand-logo').style.display = 'none';
+            document.getElementById('brand-logo').style.opacity = '0';
+            document.getElementById('glow-layer').style.opacity = '0';
+            document.getElementById('amber-glow').style.opacity = '0';
+            currentObject = null;
+        }
+
+        function startSequence() {
+            if (isPlaying) return;
+            isPlaying = true;
+
+            const overlay = document.getElementById('play-overlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                resetScene();
+                runMainTimeline();
+            }, 600);
+        }
+
+        function showReplay() {
+            const overlay = document.getElementById('play-overlay');
+            overlay.querySelector('.btn').textContent = '重播';
+            overlay.style.display = 'flex';
+            overlay.style.opacity = '0';
+            gsap.to(overlay, { opacity: 1, duration: 0.8 });
+            isPlaying = false;
+        }
+
+        function runMainTimeline() {
+            timeline = gsap.timeline({
+                onComplete: () => {
+                    setTimeout(showReplay, 2000);
+                }
+            });
+
+            // ── 0-1s [ORIGIN]: 白点脉冲 ──
+            const dotGeo = new THREE.CircleGeometry(0.02, 32);
+            const dotMat = new THREE.MeshBasicMaterial({ color: COLORS.white });
+            const dot = new THREE.Mesh(dotGeo, dotMat);
+            mainGroup.add(dot);
+
+            timeline.to(dot.scale, { x: 1.5, y: 1.5, duration: 0.5, repeat: 1, yoyo: true });
+
+            // 同心环波纹
+            const createRing = (delay) => {
+                const rGeo = new THREE.RingGeometry(0.02, 0.025, 64);
+                const rMat = new THREE.MeshBasicMaterial({ color: COLORS.white, transparent: true });
+                const ring = new THREE.Mesh(rGeo, rMat);
+                mainGroup.add(ring);
+                gsap.to(ring.scale, { x: 100, y: 100, duration: 1, delay: delay, ease: "power2.out" });
+                gsap.to(rMat, { opacity: 0, duration: 1, delay: delay, ease: "power2.out", onComplete: () => {
+                    disposeObject(ring);
+                    mainGroup.remove(ring);
+                }});
+            };
+            timeline.add(() => { createRing(0); createRing(0.1); createRing(0.2); }, 0.5);
+
+            // ── 1-2s [LINE]: 延伸成水平线 ──
+            timeline.to(dot.scale, { x: 250, y: 0.1, duration: 1, ease: "elastic.out(1, 0.5)" }, 1);
+
+            // ── 2-4s [GRID -> CIRCLE] ──
+            timeline.add(() => {
+                mainGroup.remove(dot);
+                disposeObject(dot);
+
+                const gridGroup = new THREE.Group();
+                for(let i = -4; i <= 4; i++) {
+                    const hLine = createLine([-2, i * 0.2, 0], [2, i * 0.2, 0]);
+                    const vLine = createLine([i * 0.2, -2, 0], [i * 0.2, 2, 0]);
+                    gridGroup.add(hLine, vLine);
+                }
+                mainGroup.add(gridGroup);
+
+                gridGroup.children.forEach((line) => {
+                    gsap.to(line.rotation, { z: Math.PI / 2, duration: 1.5, ease: "power2.inOut" });
+                    gsap.to(line.scale, { x: 0.1, y: 0.1, duration: 1.5, ease: "power2.inOut" });
+                });
+
+                const circleGeo = new THREE.TorusGeometry(0.8, 0.005, 16, 100);
+                const circleMat = new THREE.MeshBasicMaterial({ color: COLORS.white, transparent: true, opacity: 0 });
+                const circle = new THREE.Mesh(circleGeo, circleMat);
+                mainGroup.add(circle);
+                gsap.to(circleMat, { opacity: 1, duration: 1, delay: 1 });
+                gsap.to(gridGroup.position, { z: -1, duration: 1, onComplete: () => {
+                    disposeObject(gridGroup);
+                    mainGroup.remove(gridGroup);
+                }});
+                currentObject = circle;
+            }, 2);
+
+            // ── 4-6s [WIRE FRAME -> SOLID SPHERE] ──
+            timeline.add(() => {
+                const sphereGeo = new THREE.SphereGeometry(0.8, 32, 32);
+                const sphereWireMat = new THREE.MeshBasicMaterial({ color: COLORS.white, wireframe: true, transparent: true, opacity: 0 });
+                const sphereWire = new THREE.Mesh(sphereGeo, sphereWireMat);
+                mainGroup.add(sphereWire);
+
+                gsap.to(currentObject.material, { opacity: 0, duration: 0.5 });
+                gsap.to(sphereWireMat, { opacity: 1, duration: 0.5 });
+                gsap.to(sphereWire.rotation, { y: Math.PI * 2, duration: 2, ease: "none" });
+
+                // 方向光增强立体感
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(3, 2, 4);
+                scene.add(dirLight);
+
+                const solidMat = new THREE.MeshPhongMaterial({
+                    color: COLORS.white,
+                    shininess: 100,
+                    transparent: true,
+                    opacity: 0,
+                    emissive: 0x222222
+                });
+                const sphereSolid = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), solidMat);
+                const pointLight = new THREE.PointLight(0xffffff, 1);
+                pointLight.position.set(-2, 2, 2);
+                scene.add(sphereSolid, pointLight);
+
+                gsap.to(solidMat, { opacity: 1, duration: 1, delay: 1 });
+                gsap.to(sphereWireMat, { opacity: 0, duration: 0.5, delay: 1, onComplete: () => {
+                    disposeObject(sphereWire);
+                    mainGroup.remove(sphereWire);
+                }});
+                currentObject = sphereSolid;
+            }, 4);
+
+            // ── 6-8s [INTERFACE]: 压扁 + 科技感 UI 元素 ──
+            timeline.add(() => {
+                gsap.to(currentObject.scale, { x: 1.5, y: 0.01, z: 2, duration: 1, ease: "power3.inOut" });
+
+                // 延迟添加扫描线和数据点
+                setTimeout(() => {
+                    const uiGroup = new THREE.Group();
+
+                    // 扫描线
+                    for (let i = -3; i <= 3; i++) {
+                        const scanGeo = new THREE.PlaneGeometry(2.5, 0.003);
+                        const scanMat = new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.4 });
+                        const scanLine = new THREE.Mesh(scanGeo, scanMat);
+                        scanLine.position.y = i * 0.15;
+                        scanLine.position.z = 0.01;
+                        uiGroup.add(scanLine);
+                        gsap.fromTo(scanMat, { opacity: 0 }, { opacity: 0.4, duration: 0.3, delay: i * 0.08 });
+                    }
+
+                    // 数据点闪烁
+                    for (let i = 0; i < 20; i++) {
+                        const dotGeo = new THREE.CircleGeometry(0.015, 8);
+                        const dotMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true });
+                        const dataDot = new THREE.Mesh(dotGeo, dotMat);
+                        dataDot.position.set(
+                            (Math.random() - 0.5) * 2,
+                            (Math.random() - 0.5) * 1.2,
+                            0.02
+                        );
+                        uiGroup.add(dataDot);
+                        gsap.to(dotMat, {
+                            opacity: 0,
+                            duration: 0.3 + Math.random() * 0.5,
+                            repeat: -1,
+                            yoyo: true,
+                            delay: Math.random() * 1
+                        });
+                    }
+
+                    // 外框
+                    const frameGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(2.6, 1.6));
+                    const frameMat = new THREE.LineBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.6 });
+                    const frame = new THREE.LineSegments(frameGeo, frameMat);
+                    frame.position.z = 0.01;
+                    uiGroup.add(frame);
+                    gsap.fromTo(frameMat, { opacity: 0 }, { opacity: 0.6, duration: 0.5 });
+
+                    mainGroup.add(uiGroup);
+
+                    // 退出时清理
+                    gsap.to(uiGroup.children.map(c => c.material), {
+                        opacity: 0, duration: 0.5, delay: 1,
+                        onComplete: () => {
+                            disposeObject(uiGroup);
+                            mainGroup.remove(uiGroup);
+                        }
+                    });
+                }, 1000);
+            }, 6);
+
+            // ── 8-10s [CUBE -> BLOOM] ──
+            timeline.add(() => {
+                clearMainGroup();
+                // 清理场景中的灯光
+                scene.children
+                    .filter(c => c.isLight && c !== ambientLight)
+                    .forEach(l => scene.remove(l));
+
+                const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+                const boxWire = new THREE.EdgesGeometry(boxGeo);
+                const boxMat = new THREE.LineBasicMaterial({ color: COLORS.white });
+                const cube = new THREE.LineSegments(boxWire, boxMat);
+                mainGroup.add(cube);
+
+                gsap.to(cube.rotation, { x: Math.PI, y: Math.PI, duration: 1 });
+
+                for(let i = 0; i < 6; i++) {
+                    const petalGeo = new THREE.SphereGeometry(0.4, 32, 32);
+                    petalGeo.scale(1, 1.5, 0.1);
+                    const petalMat = new THREE.MeshBasicMaterial({ color: COLORS.white });
+                    const petal = new THREE.Mesh(petalGeo, petalMat);
+                    mainGroup.add(petal);
+                    gsap.to(petal.position, {
+                        x: (Math.random() - 0.5) * 2,
+                        y: (Math.random() - 0.5) * 2,
+                        z: (Math.random() - 0.5) * 2,
+                        duration: 1.5, delay: 1, ease: "power2.out"
+                    });
+                    gsap.to(petal.scale, { x: 0, y: 0, z: 0, duration: 1, delay: 2 });
+                }
+            }, 8);
+
+            // ── 10-12s [VORTEX]: 球形分布粒子 + 漩涡 ──
+            const particleCount = 1200;
+            const particles = new THREE.BufferGeometry();
+            const posArray = new Float32Array(particleCount * 3);
+            // 球形分布
+            for(let i = 0; i < particleCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = Math.cbrt(Math.random()) * 3;
+                posArray[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                posArray[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                posArray[i*3+2] = r * Math.cos(phi);
+            }
+            particles.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+            // 渐变大小
+            const sizes = new Float32Array(particleCount);
+            for(let i = 0; i < particleCount; i++) sizes[i] = 0.01 + Math.random() * 0.02;
+            particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const pMat = new THREE.PointsMaterial({ size: 0.02, color: COLORS.white, transparent: true, opacity: 0.9 });
+            const pMesh = new THREE.Points(particles, pMat);
+
+            timeline.add(() => {
+                clearMainGroup();
+                mainGroup.add(pMesh);
+                // 漩涡旋转，带加速效果
+                gsap.to(pMesh.rotation, { z: Math.PI * 4, duration: 3, ease: "power1.inOut" });
+                gsap.to(pMesh.rotation, { x: Math.PI * 0.3, duration: 2, ease: "sine.inOut" });
+            }, 10);
+
+            // ── 12-13s [WATCH Silhouette]: 平滑插值过渡 ──
+            timeline.add(() => {
+                const startPositions = new Float32Array(particles.attributes.position.array);
+                const endPositions = new Float32Array(particleCount * 3);
+
+                // 目标：矩形手表轮廓
+                for(let i = 0; i < particleCount; i++) {
+                    endPositions[i*3] = (Math.random() - 0.5) * 0.8;
+                    endPositions[i*3+1] = (Math.random() - 0.5) * 1.5;
+                    endPositions[i*3+2] = 0;
+                }
+
+                // 使用 GSAP 做插值动画
+                const morphObj = { t: 0 };
+                gsap.to(morphObj, {
+                    t: 1,
+                    duration: 1,
+                    ease: "power2.inOut",
+                    onUpdate: () => {
+                        const pos = particles.attributes.position.array;
+                        for(let i = 0; i < particleCount * 3; i++) {
+                            pos[i] = startPositions[i] + (endPositions[i] - startPositions[i]) * morphObj.t;
+                        }
+                        particles.attributes.position.needsUpdate = true;
+                    }
+                });
+
+                // 停止之前的旋转
+                gsap.to(pMesh.rotation, { z: pMesh.rotation.z, x: pMesh.rotation.x, duration: 0.3 });
+            }, 12);
+
+            // ── 13-14s [COLLAPSE] ──
+            timeline.add(() => {
+                gsap.to(pMesh.scale, { x: 0, y: 0, z: 0, duration: 1, ease: "back.in(2)" });
+                gsap.to(pMat, { opacity: 0, duration: 0.8, delay: 0.2 });
+            }, 13);
+
+            // ── 14-15s [LOGO] ──
+            timeline.add(() => {
+                const logo = document.getElementById('brand-logo');
+                logo.style.display = 'block';
+                gsap.fromTo(logo, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.8, ease: "power2.out" });
+
+                // 琥珀色光晕（CSS 层）
+                const glowLayer = document.getElementById('glow-layer');
+                const amberGlow = document.getElementById('amber-glow');
+                gsap.to(glowLayer, { opacity: 1, duration: 0.5 });
+                gsap.to(amberGlow, { opacity: 1, duration: 0.8 });
+                gsap.to(amberGlow, { opacity: 0, duration: 2, delay: 1.5 });
+                gsap.to(glowLayer, { opacity: 0, duration: 1, delay: 2 });
+
+                // Three.js 琥珀色点光
+                const amberLight = new THREE.PointLight(COLORS.amber, 0, 10);
+                scene.add(amberLight);
+                gsap.to(amberLight, { intensity: 5, duration: 1 });
+                gsap.to(amberLight, { intensity: 0, duration: 2, delay: 1 });
+
+                // 粒子尾迹
+                for(let i = 0; i < 30; i++) {
+                    const trailGeo = new THREE.CircleGeometry(0.008 + Math.random() * 0.008, 6);
+                    const trailMat = new THREE.MeshBasicMaterial({
+                        color: Math.random() > 0.5 ? COLORS.amber : COLORS.white,
+                        transparent: true
+                    });
+                    const trail = new THREE.Mesh(trailGeo, trailMat);
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 0.5 + Math.random() * 2;
+                    trail.position.set(Math.cos(angle) * dist, Math.sin(angle) * dist, 0);
+                    scene.add(trail);
+
+                    gsap.to(trail.position, {
+                        x: 0, y: 0, z: 0,
+                        duration: 1 + Math.random(),
+                        delay: Math.random() * 0.5,
+                        ease: "power2.in"
+                    });
+                    gsap.to(trailMat, {
+                        opacity: 0,
+                        duration: 1 + Math.random(),
+                        delay: Math.random() * 0.5
+                    });
+                }
+            }, 14);
+        }
+
+        function createLine(start, end) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(...start),
+                new THREE.Vector3(...end)
+            ]);
+            const material = new THREE.LineBasicMaterial({ color: COLORS.white });
+            return new THREE.Line(geometry, material);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
