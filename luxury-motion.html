@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motion Design Sequence</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body, html {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Inter', sans-serif;
+        }
+
+        canvas { display: block; }
+
+        #play-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 100;
+            transition: opacity 0.8s ease;
+        }
+
+        .play-btn {
+            padding: 16px 48px;
+            border: 1px solid rgba(255,255,255,0.6);
+            color: #fff;
+            background: transparent;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 300;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+        }
+
+        .play-btn:hover {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+        }
+
+        #brand-logo {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 52px;
+            letter-spacing: 16px;
+            font-weight: 200;
+            color: #fff;
+            display: none;
+            z-index: 20;
+            text-shadow: 0 0 60px rgba(255,191,0,0.3), 0 0 120px rgba(255,191,0,0.1);
+        }
+
+        #amber-glow {
+            position: fixed;
+            top: 50%; left: 50%;
+            width: 500px; height: 500px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,191,0,0.25) 0%, rgba(255,191,0,0.05) 45%, transparent 70%);
+            opacity: 0;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            #brand-logo { font-size: 28px; letter-spacing: 10px; }
+            .play-btn { padding: 12px 32px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="play-overlay">
+        <button class="play-btn">Play</button>
+    </div>
+    <div id="amber-glow"></div>
+    <div id="brand-logo">MOTION</div>
+
+    <script>
+    (function() {
+        let scene, camera, renderer, tl, ambLight;
+        const root = new THREE.Group();
+        let cur = null;
+
+        const W = 0xffffff, BLK = 0x000000, AMB = 0xffbf00;
+        const W3 = new THREE.Color(W);
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(BLK);
+            camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(innerWidth, innerHeight);
+            renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+            ambLight = new THREE.AmbientLight(W, 0.15);
+            scene.add(ambLight);
+            scene.add(root);
+            addEventListener('resize', () => {
+                camera.aspect = innerWidth / innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(innerWidth, innerHeight);
+            });
+            document.getElementById('play-overlay').onclick = go;
+            loop();
+        }
+
+        function loop() { requestAnimationFrame(loop); renderer.render(scene, camera); }
+
+        function dispose(o) {
+            if (!o) return;
+            if (o.geometry) o.geometry.dispose();
+            if (o.material) {
+                if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+                else o.material.dispose();
+            }
+            if (o.children) [...o.children].forEach(c => dispose(c));
+        }
+
+        function clearRoot() {
+            [...root.children].forEach(c => { dispose(c); root.remove(c); });
+            scene.children.filter(c => c.isLight && c !== ambLight).forEach(l => scene.remove(l));
+            cur = null;
+        }
+
+        function go() {
+            const ov = document.getElementById('play-overlay');
+            ov.style.opacity = '0';
+            setTimeout(() => { ov.style.display = 'none'; clearRoot(); run(); }, 800);
+        }
+
+        function replay() {
+            const ov = document.getElementById('play-overlay');
+            ov.querySelector('.play-btn').textContent = 'Replay';
+            ov.style.display = 'flex';
+            ov.style.opacity = '0';
+            gsap.to(ov, { opacity: 1, duration: 1 });
+            document.getElementById('brand-logo').style.display = 'none';
+            document.getElementById('amber-glow').style.opacity = '0';
+        }
+
+        function mkLine(a, b) {
+            const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
+            return new THREE.Line(g, new THREE.LineBasicMaterial({ color: W }));
+        }
+
+        function run() {
+            tl = gsap.timeline({ onComplete: () => setTimeout(replay, 2500) });
+
+            // ══════════════════════════════════════════
+            // 0-1s [ORIGIN]: 白点脉冲 + 三重心跳波纹
+            // ══════════════════════════════════════════
+            const dot = new THREE.Mesh(
+                new THREE.CircleGeometry(0.018, 32),
+                new THREE.MeshBasicMaterial({ color: W })
+            );
+            root.add(dot);
+
+            // 脉冲
+            tl.to(dot.scale, { x: 2, y: 2, duration: 0.25, ease: "power2.out" })
+              .to(dot.scale, { x: 1, y: 1, duration: 0.35, ease: "power2.in" });
+
+            // 三重同心环波纹 — 像心跳一样
+            [0.3, 0.45, 0.6].forEach(delay => {
+                tl.add(() => {
+                    const rg = new THREE.RingGeometry(0.015, 0.022, 64);
+                    const rm = new THREE.MeshBasicMaterial({ color: W, transparent: true, opacity: 0.9 });
+                    const ring = new THREE.Mesh(rg, rm);
+                    root.add(ring);
+                    gsap.to(ring.scale, { x: 80, y: 80, duration: 1.2, ease: "power2.out" });
+                    gsap.to(rm, { opacity: 0, duration: 1.2, ease: "power2.out", onComplete: () => { dispose(ring); root.remove(ring); } });
+                }, delay);
+            });
+
+            // ══════════════════════════════════════════
+            // 1-2s [LINE]: 白点弹性延伸成水平线
+            // ══════════════════════════════════════════
+            tl.to(dot.scale, { x: 300, y: 0.08, duration: 1, ease: "elastic.out(1, 0.4)" }, 1);
+
+            // ══════════════════════════════════════════
+            // 2-4s [GRID → CIRCLE]: 网格扭曲收敛成圆
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                root.remove(dot); dispose(dot);
+
+                const grid = new THREE.Group();
+                const lines = [];
+                // 9 条水平线 + 9 条垂直线
+                for (let i = -4; i <= 4; i++) {
+                    const h = mkLine([-2.2, i * 0.22, 0], [2.2, i * 0.22, 0]);
+                    const v = mkLine([i * 0.22, -2.2, 0], [i * 0.22, 2.2, 0]);
+                    grid.add(h, v);
+                    lines.push(h, v);
+                }
+                root.add(grid);
+
+                // 外线向内弯曲 — 通过缩放和位移模拟弧线收敛
+                lines.forEach((line, idx) => {
+                    const isOuter = Math.abs(idx % 18 - 8) > 4;
+                    const delay = isOuter ? 0 : 0.3;
+                    gsap.to(line.scale, { x: 0.12, y: 0.12, duration: 1.8, delay, ease: "power2.inOut" });
+                    gsap.to(line.rotation, { z: Math.PI * 0.5, duration: 1.8, delay, ease: "power2.inOut" });
+                });
+
+                // 圆形轮廓渐现
+                const circle = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.85, 0.004, 16, 120),
+                    new THREE.MeshBasicMaterial({ color: W, transparent: true, opacity: 0 })
+                );
+                root.add(circle);
+                gsap.to(circle.material, { opacity: 1, duration: 1.2, delay: 0.8 });
+                gsap.to(grid.position, { z: -0.5, duration: 1, delay: 0.8, onComplete: () => { dispose(grid); root.remove(grid); } });
+                cur = circle;
+            }, 2);
+
+            // ══════════════════════════════════════════
+            // 4-6s [WIREFRAME → SOLID SPHERE]: 线框挤出 → 填充
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                // 线框球体 — 经纬线清晰
+                const sGeo = new THREE.SphereGeometry(0.85, 24, 16);
+                const wireMat = new THREE.MeshBasicMaterial({ color: W, wireframe: true, transparent: true, opacity: 0 });
+                const wireSphere = new THREE.Mesh(sGeo, wireMat);
+                root.add(wireSphere);
+
+                gsap.to(cur.material, { opacity: 0, duration: 0.4 });
+                gsap.to(wireMat, { opacity: 1, duration: 0.6 });
+                gsap.to(wireSphere.rotation, { y: Math.PI * 2, duration: 2.5, ease: "none" });
+
+                // 方向光 — 高光在左上象限
+                const dirL = new THREE.DirectionalLight(W, 1.0);
+                dirL.position.set(-3, 3, 4);
+                scene.add(dirL);
+                const ambL2 = new THREE.AmbientLight(W, 0.25);
+                scene.add(ambL2);
+
+                // 实体球 — Phong 材质
+                const solidGeo = new THREE.SphereGeometry(0.85, 64, 64);
+                const solidMat = new THREE.MeshPhongMaterial({
+                    color: W, shininess: 120, specular: 0x666666,
+                    transparent: true, opacity: 0, emissive: 0x111111
+                });
+                const solidSphere = new THREE.Mesh(solidGeo, solidMat);
+                root.add(solidSphere);
+
+                // 填充溶解效果
+                gsap.to(solidMat, { opacity: 1, duration: 1.5, delay: 0.8, ease: "power2.inOut" });
+                gsap.to(wireMat, { opacity: 0, duration: 0.8, delay: 1.2, onComplete: () => { dispose(wireSphere); root.remove(wireSphere); } });
+                cur = solidSphere;
+            }, 4);
+
+            // ══════════════════════════════════════════
+            // 6-8s [INTERFACE]: 球体 → 圆角矩形手机界面
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                // 球体压扁展开成平面
+                gsap.to(cur.scale, { x: 0.9, y: 1.7, z: 0.01, duration: 1, ease: "power3.inOut" });
+                gsap.to(cur.material, { opacity: 0, duration: 0.8, delay: 0.5 });
+
+                // 手机界面 UI 组
+                setTimeout(() => {
+                    const ui = new THREE.Group();
+                    const uiMat = new THREE.LineBasicMaterial({ color: W, transparent: true, opacity: 0 });
+
+                    // 外框 — 圆角矩形
+                    const outerShape = new THREE.Shape();
+                    const w = 0.8, h = 1.5, r = 0.08;
+                    outerShape.moveTo(-w/2+r, -h/2);
+                    outerShape.lineTo(w/2-r, -h/2);
+                    outerShape.quadraticCurveTo(w/2, -h/2, w/2, -h/2+r);
+                    outerShape.lineTo(w/2, h/2-r);
+                    outerShape.quadraticCurveTo(w/2, h/2, w/2-r, h/2);
+                    outerShape.lineTo(-w/2+r, h/2);
+                    outerShape.quadraticCurveTo(-w/2, h/2, -w/2, h/2-r);
+                    outerShape.lineTo(-w/2, -h/2+r);
+                    outerShape.quadraticCurveTo(-w/2, -h/2, -w/2+r, -h/2);
+                    const outerGeo = new THREE.ShapeGeometry(outerShape);
+                    const outerEdges = new THREE.EdgesGeometry(outerGeo);
+                    const outerFrame = new THREE.LineSegments(outerEdges, new THREE.LineBasicMaterial({ color: W, transparent: true, opacity: 0 }));
+                    outerFrame.position.z = 0.01;
+                    ui.add(outerFrame);
+
+                    // 状态栏 — 顶部小横线
+                    const statusBar = mkLine([-0.3, 0.68, 0.01], [0.3, 0.68, 0.01]);
+                    statusBar.material = new THREE.LineBasicMaterial({ color: W, transparent: true, opacity: 0 });
+                    ui.add(statusBar);
+
+                    // 圆形网格应用图标 — 4x4
+                    for (let row = 0; row < 4; row++) {
+                        for (let col = 0; col < 4; col++) {
+                            const cx = -0.27 + col * 0.18;
+                            const cy = 0.35 - row * 0.22;
+                            const iconGeo = new THREE.RingGeometry(0.04, 0.05, 16);
+                            const iconMat = new THREE.MeshBasicMaterial({ color: W, transparent: true, opacity: 0 });
+                            const icon = new THREE.Mesh(iconGeo, iconMat);
+                            icon.position.set(cx, cy, 0.01);
+                            ui.add(icon);
+                            gsap.to(iconMat, { opacity: 0.5 + Math.random() * 0.3, duration: 0.3, delay: 1 + (row * 4 + col) * 0.05 });
+                        }
+                    }
+
+                    // 主页指示栏 — 底部短横线
+                    const homeBar = mkLine([-0.12, -0.65, 0.01], [0.12, -0.65, 0.01]);
+                    homeBar.material = new THREE.LineBasicMaterial({ color: W, transparent: true, opacity: 0 });
+                    ui.add(homeBar);
+
+                    root.add(ui);
+
+                    // 渐入所有 UI 元素
+                    gsap.to(outerFrame.material, { opacity: 0.8, duration: 0.5, delay: 0.5 });
+                    gsap.to(statusBar.material, { opacity: 0.4, duration: 0.3, delay: 0.7 });
+                    gsap.to(homeBar.material, { opacity: 0.5, duration: 0.3, delay: 0.8 });
+
+                    // 退出时渐隐
+                    setTimeout(() => {
+                        ui.children.forEach(c => {
+                            if (c.material) gsap.to(c.material, { opacity: 0, duration: 0.5 });
+                        });
+                        gsap.to(ui.position, { z: -0.3, duration: 0.5, onComplete: () => { dispose(ui); root.remove(ui); } });
+                    }, 1800);
+                }, 800);
+            }, 6);
+
+            // ══════════════════════════════════════════
+            // 8-10s [CUBE → BLOOM]: 等距线框立方体 → 花瓣绽放
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                clearRoot();
+
+                // 等距视角线框立方体
+                const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+                const edges = new THREE.EdgesGeometry(boxGeo);
+                const cube = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: W }));
+                // 等距旋转
+                cube.rotation.x = Math.PI * 0.15;
+                cube.rotation.y = Math.PI * 0.25;
+                root.add(cube);
+
+                // 翻滚一周
+                gsap.to(cube.rotation, { x: cube.rotation.x + Math.PI * 2, y: cube.rotation.y + Math.PI * 2, duration: 1.2, ease: "power2.inOut" });
+
+                // 六面花瓣绽放 — 椭圆形
+                const petals = [];
+                const dirs = [
+                    [1,0,0], [-1,0,0], [0,1,0], [0,-1,0], [0,0,1], [0,0,-1]
+                ];
+                dirs.forEach((dir, i) => {
+                    const pGeo = new THREE.SphereGeometry(0.35, 32, 16);
+                    pGeo.scale(1, 1.6, 0.08); // 椭圆花瓣
+                    const pMat = new THREE.MeshBasicMaterial({ color: W, transparent: true, opacity: 0.9 });
+                    const petal = new THREE.Mesh(pGeo, pMat);
+                    petal.position.set(0, 0, 0);
+                    // 初始面向外
+                    petal.lookAt(dir[0], dir[1], dir[2]);
+                    root.add(petal);
+                    petals.push(petal);
+
+                    gsap.to(petal.position, {
+                        x: dir[0] * 1.2, y: dir[1] * 1.2, z: dir[2] * 1.2,
+                        duration: 1.5, delay: 0.8, ease: "power2.out"
+                    });
+                });
+
+                // 立方体渐隐
+                gsap.to(cube.material, { opacity: 0, duration: 0.5, delay: 0.8 });
+
+                // 花瓣渐隐
+                petals.forEach(p => {
+                    gsap.to(p.material, { opacity: 0, duration: 0.8, delay: 2 });
+                });
+            }, 8);
+
+            // ══════════════════════════════════════════
+            // 10-12s [VORTEX]: 粒子椭圆漩涡
+            // ══════════════════════════════════════════
+            const pCount = 800;
+            const pGeo = new THREE.BufferGeometry();
+            const posArr = new Float32Array(pCount * 3);
+            const velArr = new Float32Array(pCount * 3); // 速度存储
+            const dirArr = new Float32Array(pCount); // 1=CW, -1=CCW
+
+            // 初始球形分布
+            for (let i = 0; i < pCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = Math.cbrt(Math.random()) * 2.5;
+                posArr[i*3] = r * Math.sin(phi) * Math.cos(theta);
+                posArr[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+                posArr[i*3+2] = r * Math.cos(phi) * 0.3; // 压扁成椭圆
+                dirArr[i] = Math.random() > 0.5 ? 1 : -1; // 顺/逆时针
+            }
+            pGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            const pMat = new THREE.PointsMaterial({ size: 0.018, color: W, transparent: true, opacity: 0 });
+            const pMesh = new THREE.Points(pGeo, pMat);
+
+            tl.add(() => {
+                clearRoot();
+                root.add(pMesh);
+                gsap.to(pMat, { opacity: 0.9, duration: 0.5 });
+
+                // 漩涡动画 — 使用自定义 ticker
+                let vortexActive = true;
+                const vortexTick = () => {
+                    if (!vortexActive) return;
+                    const pos = pGeo.attributes.position.array;
+                    for (let i = 0; i < pCount; i++) {
+                        const ix = i * 3;
+                        let x = pos[ix], y = pos[ix+1];
+                        const angle = Math.atan2(y, x);
+                        const dist = Math.sqrt(x*x + y*y);
+                        const speed = (0.008 + 0.004 * Math.sin(Date.now() * 0.001 + i)) * dirArr[i];
+                        const newAngle = angle + speed;
+                        pos[ix] = dist * Math.cos(newAngle);
+                        pos[ix+1] = dist * Math.sin(newAngle);
+                        // 轻微闪烁 — 微调 z
+                        pos[ix+2] += (Math.random() - 0.5) * 0.002;
+                    }
+                    pGeo.attributes.position.needsUpdate = true;
+                };
+                gsap.ticker.add(vortexTick);
+
+                // 2秒后停止漩涡
+                setTimeout(() => { vortexActive = false; gsap.ticker.remove(vortexTick); }, 2000);
+            }, 10);
+
+            // ══════════════════════════════════════════
+            // 12-13s [WATCH]: 粒子收敛组装手表剪影
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                const startPos = new Float32Array(pGeo.attributes.position.array);
+                const endPos = new Float32Array(pCount * 3);
+
+                // 手表几何分布
+                for (let i = 0; i < pCount; i++) {
+                    const ix = i * 3;
+                    const r = Math.random();
+                    if (r < 0.6) {
+                        // 表壳 — 圆角矩形
+                        const t = Math.random();
+                        const hw = 0.35, hh = 0.42;
+                        const side = Math.floor(Math.random() * 4);
+                        if (side === 0) { endPos[ix] = (Math.random()-0.5)*hw*2; endPos[ix+1] = hh; }
+                        else if (side === 1) { endPos[ix] = (Math.random()-0.5)*hw*2; endPos[ix+1] = -hh; }
+                        else if (side === 2) { endPos[ix] = hw; endPos[ix+1] = (Math.random()-0.5)*hh*2; }
+                        else { endPos[ix] = -hw; endPos[ix+1] = (Math.random()-0.5)*hh*2; }
+                        endPos[ix+2] = 0;
+                    } else if (r < 0.75) {
+                        // 表耳 — 四个凸耳
+                        const lug = Math.floor(Math.random() * 4);
+                        const lx = lug < 2 ? 0.25 : -0.25;
+                        const ly = lug % 2 === 0 ? 0.52 : -0.52;
+                        endPos[ix] = lx + (Math.random()-0.5) * 0.08;
+                        endPos[ix+1] = ly + (Math.random()-0.5) * 0.12;
+                        endPos[ix+2] = 0;
+                    } else if (r < 0.88) {
+                        // 表盘内部线条
+                        const a = Math.random() * Math.PI * 2;
+                        const d = Math.random() * 0.28;
+                        endPos[ix] = Math.cos(a) * d;
+                        endPos[ix+1] = Math.sin(a) * d;
+                        endPos[ix+2] = 0;
+                    } else {
+                        // 表冠
+                        endPos[ix] = 0.42;
+                        endPos[ix+1] = (Math.random()-0.5) * 0.06;
+                        endPos[ix+2] = 0;
+                    }
+                }
+
+                const morph = { t: 0 };
+                gsap.to(morph, {
+                    t: 1, duration: 1, ease: "power2.inOut",
+                    onUpdate: () => {
+                        const pos = pGeo.attributes.position.array;
+                        for (let i = 0; i < pCount * 3; i++) {
+                            pos[i] = startPos[i] + (endPos[i] - startPos[i]) * morph.t;
+                        }
+                        pGeo.attributes.position.needsUpdate = true;
+                    }
+                });
+            }, 12);
+
+            // ══════════════════════════════════════════
+            // 13-14s [COLLAPSE]: 液态丝带压缩 → 球体 → 坍塌点
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                // 粒子向中心压缩
+                gsap.to(pMesh.scale, { x: 0.15, y: 0.15, z: 0.15, duration: 0.6, ease: "power2.in" });
+                gsap.to(pMat, { opacity: 0, duration: 0.5, delay: 0.3 });
+
+                // 生成致密白色球体
+                setTimeout(() => {
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.25, 48, 48),
+                        new THREE.MeshBasicMaterial({ color: W, transparent: true, opacity: 0 })
+                    );
+                    root.add(sphere);
+                    gsap.to(sphere.material, { opacity: 1, duration: 0.3 });
+
+                    // 脉冲 — 更亮
+                    gsap.to(sphere.scale, { x: 1.3, y: 1.3, z: 1.3, duration: 0.2, delay: 0.3, ease: "power2.out" });
+                    gsap.to(sphere.scale, { x: 0.01, y: 0.01, z: 0.01, duration: 0.4, delay: 0.5, ease: "power3.in" });
+                    gsap.to(sphere.material, { opacity: 2, duration: 0.2, delay: 0.3 }); // 超亮脉冲
+                    gsap.to(sphere.material, { opacity: 0, duration: 0.3, delay: 0.6 });
+                }, 500);
+            }, 13);
+
+            // ══════════════════════════════════════════
+            // 14-15s [LOGO]: 静默节拍 → 品牌标志 + 琥珀光晕
+            // ══════════════════════════════════════════
+            tl.add(() => {
+                clearRoot();
+
+                // 静默节拍 — 0.3秒黑屏
+                setTimeout(() => {
+                    const logo = document.getElementById('brand-logo');
+                    logo.style.display = 'block';
+                    gsap.fromTo(logo,
+                        { opacity: 0, scale: 0.85, letterSpacing: '24px' },
+                        { opacity: 1, scale: 1, letterSpacing: '16px', duration: 1, ease: "power2.out" }
+                    );
+
+                    // 琥珀色光晕
+                    const glow = document.getElementById('amber-glow');
+                    gsap.to(glow, { opacity: 1, duration: 0.8, delay: 0.3 });
+                    gsap.to(glow, { opacity: 0, duration: 2.5, delay: 1.5 });
+
+                    // Three.js 背光
+                    const aLight = new THREE.PointLight(AMB, 0, 12);
+                    scene.add(aLight);
+                    gsap.to(aLight, { intensity: 4, duration: 0.8, delay: 0.3 });
+                    gsap.to(aLight, { intensity: 0, duration: 2.5, delay: 1.5 });
+                }, 300);
+            }, 14);
+        }
+
+        window.onload = init;
+    })();
+    </script>
+</body>
+</html>
