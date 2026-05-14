@@ -1,0 +1,90 @@
+# Windows system files
+NTUSER.DAT*
+ntuser.dat*
+ntuser.ini
+
+# User profile folders
+AppData/
+Contacts/
+Desktop/
+Documents/
+Downloads/
+Favorites/
+Links/
+Music/
+OneDrive/
+Pictures/
+Videos/
+Saved Games/
+Searches/
+
+# Development tools
+.anaconda/
+.android/
+.cache/
+.conda/
+.vscode/
+.vscode-shared/
+.copilot/
+.cline/
+.codex/
+.gemini/
+.marscode/
+.trae-cn/
+.continue/
+
+# Claude Code
+.claude/
+.claude.json
+
+# Package managers and caches
+.node_repl_history
+.python_history
+.ipython/
+.jupyter/
+.ipynb_checkpoints/
+
+# Config files
+.gitconfig
+.bash_history
+.lesshst
+
+# Other tools
+.LemuHyperv/
+.ai_completion/
+.cc-switch/
+.cherrystudio/
+.idlerc/
+.leigod/
+.leigod-c5e96d21.config/
+.nn-acc/
+.heyboxacc.conf
+.ollama/
+
+# WPS Cloud
+WPS Cloud Files/
+
+# Game files
+RidersRepublic/
+
+# Anaconda
+anaconda3/
+
+# Other
+.vscode-remote-wsl/
+package-lock.json
+
+# Jupyter notebooks in home dir
+Untitled*.ipynb
+
+# Other files
+webcast_mate/
+thumbnails/
+
+# Remaining files
+.thumbnails/
+Saved Games/
+WPS Cloud Files/
+vscode-remote-wsl/
+英国摇滚乐.py
+萨瓦达瓦
